@@ -1,0 +1,1837 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BPCL — SmartFleet Sales Dashboard</title>
+<meta name="description" content="BPCL SmartFleet Sales Transaction Dashboard — Login, filter by date and fuel station and view pivot tables.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* ===================== API CONFIG NOTICE =====================
+   Replace the constants at the top of the script section:
+     BASE_URL      - base URL of the BPCL API
+     CLIENT_ID     - OAuth2 client_id
+     CLIENT_SECRET - OAuth2 client_secret
+     Username / password are typed on the login page
+     ACCOUNT_ID    - SmartFleet account ID
+   ============================================================= */
+
+:root {
+  --brand:       #c8102e;
+  --brand-dark:  #9b0d23;
+  --brand-light: #fce8ec;
+  --accent:      #f7a800;
+  --accent-dark: #c68700;
+  --ink:         #1a1a2e;
+  --ink-2:       #3d3d5c;
+  --ink-3:       #6b7280;
+  --border:      #e2e5eb;
+  --surface:     #ffffff;
+  --page:        #f4f5f9;
+  --head-bg:     #1a1a2e;
+  --head-text:   #ffffff;
+  --row-even:    #fafbfd;
+  --row-hover:   #eef3ff;
+  --total-bg:    #1a1a2e;
+  --total-text:  #ffffff;
+  --success:     #16a34a;
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.08);
+  --shadow-md:   0 4px 16px rgba(0,0,0,.1);
+  --shadow-lg:   0 8px 32px rgba(0,0,0,.14);
+  --radius:      10px;
+  --radius-sm:   6px;
+}
+
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', Arial, sans-serif; background: var(--page); color: var(--ink); min-height: 100vh; }
+
+/* HEADER */
+.site-header {
+  background: linear-gradient(135deg, var(--head-bg) 0%, #16213e 100%);
+  color: var(--head-text);
+  padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 12px rgba(0,0,0,.35);
+}
+
+/* API CONFIG PANEL */
+.api-config-bar {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1.5px solid var(--accent);
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.api-config-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 100%);
+  color: #fff;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.api-config-header:hover { background: linear-gradient(90deg, #16213e 0%, #0f3460 100%); }
+.api-config-body {
+  padding: 16px 18px 12px;
+  border-top: 1px solid var(--border);
+  background: #fffdf5;
+}
+.site-header .logo { display: flex; align-items: center; gap: 12px; }
+.site-header .logo-badge {
+  width: 40px; height: 40px; background: var(--brand);
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 15px; color: #fff; flex-shrink: 0;
+}
+.site-header .logo-text { font-size: 15px; font-weight: 700; line-height: 1.3; }
+.site-header .logo-sub  { font-size: 11px; opacity: .65; font-weight: 400; }
+.site-header .header-actions { display: flex; align-items: center; gap: 10px; }
+
+/* BUTTONS */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: none; border-radius: var(--radius-sm); padding: 9px 18px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all .18s ease; font-family: inherit; white-space: nowrap;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--brand-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(200,16,46,.35); }
+.btn-accent  { background: var(--accent); color: var(--ink); }
+.btn-accent:hover:not(:disabled) { background: var(--accent-dark); transform: translateY(-1px); }
+.btn-ghost   { background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); }
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,.22); }
+.btn-outline { background: transparent; color: var(--ink-2); border: 1.5px solid var(--border); }
+.btn-outline:hover:not(:disabled) { background: var(--page); border-color: var(--brand); color: var(--brand); }
+.btn-danger  { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.3); }
+.btn-danger:hover:not(:disabled) { background: var(--brand); border-color: var(--brand); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+
+@media (max-width: 360px) {
+  .login-card { padding: 24px 16px; }
+  .login-logo { width: 48px; height: 48px; font-size: 13px; }
+}
+/* TOKEN TIMER */
+.token-badge { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25); white-space: nowrap; }
+.token-badge.low { background: var(--accent); color: var(--ink); border-color: var(--accent); }
+.token-badge.expired { background: var(--brand); color: #fff; border-color: var(--brand); }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(247,168,0,.7); } 50% { box-shadow: 0 0 0 6px rgba(247,168,0,0); } }
+#refreshBtn.attention { animation: pulse 1.2s infinite; }
+
+/* LAYOUT */
+.main { max-width: 1600px; margin: 0 auto; padding: 24px 20px 48px; }
+
+/* LOGIN (responsive) */
+#loginScreen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: calc(100vh - 64px); min-height: calc(100dvh - 64px);
+  padding: 32px 16px;
+  background: radial-gradient(circle at 15% 10%, var(--brand-light) 0, transparent 45%),
+              radial-gradient(circle at 90% 90%, #fff4d6 0, transparent 40%);
+}
+.login-card {
+  background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg);
+  padding: 40px 36px; width: 100%; max-width: 400px; border-top: 4px solid var(--brand);
+}
+.login-logo { width: 56px; height: 56px; border-radius: 14px; background: var(--brand); color: #fff;
+  font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px; letter-spacing: .5px; box-shadow: 0 6px 16px rgba(200,16,46,.3); }
+.login-card h2 { font-size: 22px; font-weight: 800; color: var(--ink); margin-bottom: 6px; text-align: center; }
+.login-card p.sub { font-size: 13px; color: var(--ink-3); margin-bottom: 28px; text-align: center; }
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+.form-group input {
+  width: 100%; padding: 12px 14px; border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 15px; font-family: inherit;
+  color: var(--ink); outline: none; transition: border-color .15s, box-shadow .15s; background: #fafbfd;
+}
+.form-group input:focus { border-color: var(--brand); background: #fff; box-shadow: 0 0 0 3px var(--brand-light); }
+.pass-wrap { position: relative; }
+.pass-wrap input { padding-right: 64px; }
+.pass-toggle { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent;
+  color: var(--ink-3); font-size: 12px; font-weight: 600; font-family: inherit; padding: 8px 10px; cursor: pointer; border-radius: 6px; }
+.pass-toggle:hover { color: var(--brand); background: var(--brand-light); }
+.login-card .btn { width: 100%; justify-content: center; margin-top: 6px; padding: 13px; font-size: 15px; }
+.login-foot { margin-top: 22px; text-align: center; font-size: 11px; color: var(--ink-3); }
+
+/* ALERTS */
+.alert {
+  border-radius: var(--radius-sm); padding: 12px 16px; font-size: 13px; font-weight: 500;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+}
+.alert-info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.alert-error   { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.alert-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.alert-icon    { font-size: 16px; flex-shrink: 0; }
+
+/* DASHBOARD */
+#dashboard { display: none; }
+
+/* FILTERS */
+.filter-bar {
+  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border); padding: 18px 20px; margin-bottom: 20px;
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+}
+.filter-group { display: flex; flex-direction: column; gap: 5px; min-width: 160px; }
+.filter-group label { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .5px; }
+.filter-group input,
+.filter-group select {
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 12px; font-size: 13px; font-family: inherit; color: var(--ink);
+  outline: none; background: #fafbfd; transition: border-color .15s; height: 40px;
+}
+.filter-group input:focus,
+.filter-group select:focus { border-color: var(--brand); background: #fff; }
+.filter-actions { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+
+/* KPI CARDS */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.kpi-card {
+  background: var(--surface); border-radius: var(--radius); padding: 20px 22px;
+  box-shadow: var(--shadow-sm); border: 1px solid var(--border);
+  position: relative; overflow: hidden; transition: box-shadow .18s, transform .18s;
+}
+.kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 3px; border-radius: var(--radius) var(--radius) 0 0;
+}
+.kpi-card.red::before   { background: var(--brand); }
+.kpi-card.gold::before  { background: var(--accent); }
+.kpi-card.blue::before  { background: #3b82f6; }
+.kpi-card.green::before { background: var(--success); }
+.kpi-label { font-size: 11px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+.kpi-value { font-size: 26px; font-weight: 800; color: var(--ink); line-height: 1; }
+.kpi-sub   { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+.kpi-icon  { position: absolute; right: 18px; top: 18px; font-size: 26px; opacity: .13; }
+
+/* SECTION TITLE */
+.section-title { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.section-title .badge { background: var(--brand-light); color: var(--brand); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+
+/* SHEET WRAP */
+.sheet-wrap {
+  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border); padding: 20px; margin-bottom: 24px; overflow-x: auto;
+}
+
+/* PIVOT TABLE */
+.print-table { border-collapse: collapse; width: 100%; min-width: 700px; font-size: 12.5px; }
+.print-table th, .print-table td { border: 1px solid #d1d5db; padding: 8px 11px; white-space: nowrap; }
+.print-table td { text-align: right; }
+.print-table td:first-child, .print-table th:first-child { text-align: left; }
+.title-row th { font-size: 18px; font-weight: 800; text-align: center !important; padding: 14px; background: var(--head-bg); color: var(--head-text); border-color: var(--head-bg); }
+.group-row th { background: var(--brand); color: #fff; font-weight: 700; text-align: center !important; font-size: 12px; white-space: normal; }
+.label-row th { background: #f1f5f9; font-weight: 700; text-align: center !important; white-space: normal; min-width: 110px; font-size: 12px; color: var(--ink-2); }
+.label-row th:first-child { text-align: left !important; min-width: 120px; }
+.print-table tbody tr:nth-child(even) { background: var(--row-even); }
+.print-table tbody tr:hover { background: var(--row-hover); }
+.total-row td { font-weight: 700; background: var(--total-bg); color: var(--total-text); border-color: var(--total-bg); }
+.spacer td { height: 12px; background: transparent !important; border-color: transparent !important; }
+.summary td { height: 32px; }
+.summary .lbl { font-weight: 700; text-align: left !important; background: #f8fafc; }
+.summary .val { text-align: right !important; }
+.summary .hi  { background: #fef9c3; font-weight: 700; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+.tag-debit  { background: #fee2e2; color: #991b1b; }
+.tag-credit { background: #dcfce7; color: #14532d; }
+
+/* LOADING */
+.loading-overlay { display: none; position: fixed; inset: 0; background: rgba(26,26,46,.65); z-index: 999; align-items: center; justify-content: center; }
+.loading-overlay.active { display: flex; }
+.loading-box { background: #fff; border-radius: 14px; padding: 36px 48px; text-align: center; box-shadow: var(--shadow-lg); }
+.spinner { width: 44px; height: 44px; border: 4px solid var(--border); border-top-color: var(--brand); border-radius: 50%; animation: spin .75s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-box p { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+
+/* EMPTY STATE */
+.empty-state { padding: 60px 20px; text-align: center; color: var(--ink-3); }
+.empty-state .e-icon { font-size: 48px; margin-bottom: 16px; opacity: .4; }
+.empty-state strong  { display: block; font-size: 17px; color: var(--ink-2); margin-bottom: 8px; }
+
+/* FOOTER */
+.footnote { max-width: 1600px; margin: 0 auto; color: var(--ink-3); font-size: 11px; padding: 0 20px 20px; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .site-header { height: 56px; padding: 0 12px; gap: 8px; }
+  /* mobile: hide "SmartFleet Dashboard / Sales Transaction Report" so the buttons fit */
+  .site-header .logo-text, .site-header .logo-sub { display: none; }
+  .site-header .logo-badge { flex-shrink: 0; }
+  .site-header .header-actions { gap: 6px; flex-shrink: 0; margin-left: auto; position: relative; z-index: 101; }
+  .site-header .header-actions .btn { white-space: nowrap; padding: 7px 12px; }
+  .main { padding: 16px 12px 40px; }
+  #loginScreen { align-items: flex-start; padding: 28px 14px; }
+  .login-card { padding: 30px 20px; border-radius: 14px; }
+  .login-card h2 { font-size: 20px; }
+  .form-group input { font-size: 16px; }  /* 16px stops iPhone from zooming in */
+  .filter-bar { padding: 14px; gap: 12px; }
+  .filter-group { min-width: calc(50% - 8px); }
+  .kpi-value { font-size: 21px; }
+  .sheet-wrap { padding: 12px; }
+}
+@media (max-width: 480px) {
+  .site-header #userLabel { display: none !important; }
+  #tokenBadge { font-size: 11px; padding: 4px 8px; }
+  #printBtn { display: none !important; }          /* no room on phones */
+  .rt-text { display: none; }                      /* Refresh button shows only the icon */
+  #refreshBtn { font-size: 15px; padding: 4px 10px !important; }
+  .site-header .header-actions .btn { padding: 6px 9px; font-size: 11px; }
+  .filter-group { min-width: 100%; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi-card { padding: 14px; }
+  .kpi-value { font-size: 18px; }
+}
+@media print {
+  body { background: #fff; }
+  .site-header, .filter-bar, .footnote, #alertBox, #exportExcelBtn { display: none !important; }
+  .kpi-grid { grid-template-columns: 1fr 1fr !important; margin-bottom: 10px; }
+  .kpi-card { box-shadow: none !important; border: 1px solid #d1d5db; }
+  .sheet-wrap { border: 0; box-shadow: none; margin: 0; padding: 0; overflow: visible; }
+  .print-table { font-size: 10pt; min-width: 0; width: 100%; }
+}
+</style>
+<style>
+/* ---- Added: multi-table layout ---- */
+.section-title .note { font-size: 11px; font-weight: 500; color: var(--ink-3); }
+.section-title .num-badge { background: var(--head-bg); color: #fff; width: 24px; height: 24px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.section-title.dc .num-badge { background: var(--accent); color: var(--ink); }
+.sub-row th { background: #f8fafc; font-weight: 600; text-align: center !important; font-size: 11px; color: var(--ink-3); }
+.group-row.dc th { background: var(--accent-dark); }
+.dc-divider { margin: 8px 0 18px; padding: 10px 16px; border-radius: var(--radius-sm); background: #fff8e6; border: 1px solid #fde68a; color: #92400e; font-size: 13px; font-weight: 600; }
+.drop-zone { border: 2px dashed var(--border); border-radius: var(--radius-sm); padding: 18px; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; gap: 6px; align-items: center; background: #fafbfd; color: var(--ink-2); font-size: 13px; }
+.drop-zone span { font-size: 12px; color: var(--ink-3); }
+.drop-zone:hover, .drop-zone.over { border-color: var(--brand); background: var(--brand-light); }
+@media print {
+  /* A4 landscape, small margins, keep colours */
+  @page { size: A4 landscape; margin: 10mm; }
+  html, body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* hide everything that is not a report table (this was making page 1 blank) */
+  .site-header, .api-config-bar, .filter-bar, .loading-overlay, #loginScreen, #alertBox, .footnote, .empty-state { display: none !important; }
+  .main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  /* each table on a new page, but NOT the first one */
+  .print-section { page-break-before: always; break-before: page; }
+  .print-section.first-print { page-break-before: auto; break-before: auto; }
+  .section-title { margin: 0 0 6px; }
+  .sheet-wrap { page-break-inside: auto; overflow: visible !important; }
+  .print-table { font-size: 8.5pt; min-width: 0 !important; width: 100% !important; }
+  .print-table th, .print-table td { padding: 4px 6px !important; }
+  .print-table tr { page-break-inside: avoid; break-inside: avoid; }
+  .print-table thead { display: table-header-group; }   /* repeat heading on every page */
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingMsg">Fetching data...</p>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="logo">
+    <div class="logo-badge">BPCL</div>
+    <div>
+      <div class="logo-text">SmartFleet Dashboard</div>
+      <div class="logo-sub">Sales Transaction Report</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <span id="userLabel" style="font-size:12px;opacity:.7;display:none"></span>
+    <button class="btn btn-accent btn-sm" id="printBtn" style="display:none" onclick="window.print()">Print / PDF</button>
+    <span id="tokenBadge" class="token-badge" style="display:none"></span>
+    <button class="btn btn-accent btn-sm" id="refreshBtn" style="display:none" onclick="refreshToken()">&#10227;<span class="rt-text"> Refresh Token</span></button>
+    <button class="btn btn-danger btn-sm" id="logoutBtn" style="display:none" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<!-- LOGIN SCREEN (username + password only) -->
+<div id="loginScreen">
+  <form class="login-card" id="loginForm" onsubmit="doLogin(event)" autocomplete="on">
+    <div class="login-logo">BPCL</div>
+    <h2>Welcome Back</h2>
+    <p class="sub">Sign in to your BPCL SmartFleet account</p>
+    <div id="loginAlert" style="display:none"></div>
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" value="9448275233" placeholder="Enter your username" autocomplete="username" inputmode="text" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <div class="pass-wrap">
+        <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required>
+        <button type="button" class="pass-toggle" id="passToggle" onclick="togglePass()" aria-label="Show password">Show</button>
+      </div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+      <input type="checkbox" id="rememberMe" checked style="width:16px;height:16px;cursor:pointer;">
+      <label for="rememberMe" style="margin:0;font-size:12px;cursor:pointer;color:var(--ink-3);">Remember credentials on this browser</label>
+    </div>
+    <button type="submit" class="btn btn-primary" id="loginBtn" style="width:100%">Sign In</button>
+
+
+    <div class="login-foot">Balaji Transports &middot; BPCL SmartFleet</div>
+  </form>
+  <input type="file" id="reportFile" accept=".csv,.json,.xlsx,.xls,.txt" multiple style="display:none" onchange="openReportFiles(this.files)">
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+<div class="main">
+
+  <div id="alertBox" style="margin-bottom:14px;display:none"></div>
+
+  <!-- API Configuration Panel -->
+  <div class="api-config-bar" id="apiConfigBar">
+    <div class="api-config-header" onclick="toggleApiConfig()">
+      <span>&#9881; API Parameters</span>
+      <span id="apiConfigToggleIcon" style="font-size:12px;opacity:.7">&#9660; Click to collapse</span>
+    </div>
+    <div class="api-config-body" id="apiConfigBody">
+      <div class="filter-bar" style="margin-bottom:0;border:0;box-shadow:none;padding:0;background:transparent;">
+        <div class="filter-group" style="min-width:200px;">
+          <label>Account ID</label>
+          <input type="text" id="cfgAccountId" value="FA2000597425" placeholder="e.g. FA2000597425">
+        </div>
+        <div class="filter-group" style="min-width:260px;">
+          <label>Report Type</label>
+          <select id="cfgReportType">
+            <option value="CONSOLIDATED" selected>Full Report (default) — matches Excel</option>
+            <option value="SALES_TRANSACTION">Card Sales only (SALES_TRANSACTION)</option>
+          </select>
+        </div>
+        <div class="filter-group" style="min-width:130px;">
+          <label>Channel</label>
+          <select id="cfgChannel">
+            <option value="Web" selected>Web</option>
+            <option value="Mobile">Mobile</option>
+            <option value="API">API</option>
+          </select>
+        </div>
+        <div class="filter-group" style="min-width:130px;">
+          <label>File Format</label>
+          <select id="cfgFileFormat">
+            <option value="json" selected>json</option>
+            <option value="csv">csv</option>
+          </select>
+        </div>
+        <div class="filter-group" style="min-width:130px;">
+          <label>Is Download</label>
+          <select id="cfgIsDownload">
+            <option value="true" selected>true</option>
+            <option value="false">false</option>
+          </select>
+        </div>
+        <div class="filter-group" style="min-width:150px;">
+          <label>Selected Period</label>
+          <select id="cfgSelectedPeriod">
+            <option value="false" selected>false</option>
+            <option value="true">true</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters (apply to ALL tables + raw data) -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Start Date</label>
+      <input type="date" id="startDate">
+    </div>
+    <div class="filter-group">
+      <label>End Date</label>
+      <input type="date" id="endDate">
+    </div>
+    <div class="filter-group" style="min-width:220px;">
+      <label>Fuel Station (roName)</label>
+      <select id="stationFilter" class="data-filter"><option value="">All Stations</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Payment Mode</label>
+      <select id="paymentFilter" class="data-filter"><option value="">All</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Transaction Type</label>
+      <select id="txnTypeFilter" class="data-filter"><option value="">All</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Product</label>
+      <select id="productFilter" class="data-filter"><option value="">All</option></select>
+    </div>
+    <div class="filter-group" style="min-width:200px;">
+      <label>Settlement Status</label>
+      <select id="settleFilter" class="data-filter"><option value="">All</option></select>
+    </div>
+    <div class="filter-group" style="min-width:210px;">
+      <label>Calculation Group</label>
+      <select id="calcFilter" class="data-filter"><option value="">All</option></select>
+    </div>
+    <div class="filter-actions">
+      <button class="btn btn-primary" id="fetchBtn" onclick="fetchData()">Fetch Data</button>
+      <button class="btn btn-outline" id="clearBtn" onclick="clearFilters()">Reset</button>
+      <button class="btn btn-accent" id="exportExcelBtn" onclick="exportAllExcel()" title="Download every record with ALL API columns">&#11015; Export Excel (all columns)</button>
+    </div>
+  </div>
+
+
+
+  <!-- Opening / Closing balance boxes -->
+  <div class="kpi-grid" id="balanceBoxes" style="display:none">
+    <div class="kpi-card green">
+      <div class="kpi-label">Opening Balance (Rs.)</div>
+      <div class="kpi-value" id="boxOpenBal">--</div>
+      <div class="kpi-sub" id="boxOpenSub">CMS balance at the start of the period</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Closing Balance (Rs.)</div>
+      <div class="kpi-value" id="boxCloseBal">--</div>
+      <div class="kpi-sub" id="boxCloseSub">CMS balance at the end of the period</div>
+    </div>
+  </div>
+
+  <!-- 1. PRINT (master) -->
+  <div class="print-section first-print">
+    <div class="section-title"><span class="num-badge">1</span> PRINT — Date-wise Fuel Expense <span class="badge" id="printBadge"></span></div>
+    <div class="sheet-wrap" id="printWrap">
+      <div class="empty-state">
+        <div class="e-icon">&#128197;</div>
+        <strong>No data loaded</strong>
+        Select a date range and click Fetch Data to load transactions.
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Transaction Type -->
+  <div class="print-section">
+    <div class="section-title"><span class="num-badge">2</span> Transaction Type — Fuel Station wise <span class="note">(only money really spent on fuel)</span> <span class="badge" id="txnTypeBadge"></span></div>
+    <div class="sheet-wrap" id="txnTypeWrap"></div>
+  </div>
+
+  <!-- 3B. Product Type — ALL fuel sales (Diesel / Petrol / Speed) -->
+  <div class="print-section">
+    <div class="section-title"><span class="num-badge">3</span> Product Type — All Fuel Sales <span class="badge" id="productAllBadge"></span></div>
+    <div class="sheet-wrap" id="productAllWrap"></div>
+  </div>
+
+  <!-- 4. Excluded -->
+  <div class="print-section">
+    <div class="section-title"><span class="num-badge">4</span> Not Added to Fuel Expense <span class="note">(what was left out and why)</span> <span class="badge" id="exclBadge"></span></div>
+    <div class="sheet-wrap" id="exclWrap"></div>
+  </div>
+
+
+  <!-- 5. Dealer Credit Date-wise -->
+  <div class="print-section">
+    <div class="section-title dc"><span class="num-badge">5</span> Dealer Credit — Date-wise <span class="note">(reversed transactions removed)</span> <span class="badge" id="dcBadge"></span></div>
+    <div class="sheet-wrap" id="dcWrap"></div>
+  </div>
+
+  <!-- 6. Dealer Credit Settlement Status -->
+  <div class="print-section">
+    <div class="section-title dc"><span class="num-badge">6</span> Dealer Credit — Settlement Status <span class="badge" id="dcSettleBadge"></span></div>
+    <div class="sheet-wrap" id="dcSettleWrap"></div>
+  </div>
+
+</div>
+</div>
+
+<div class="footnote" id="footnote" style="display:none">
+  Data sourced from BPCL SmartFleet API &middot; Account: <span id="footAccount"></span> &middot; Last fetched: <span id="footTime"></span>
+</div>
+
+<script>
+/* ============================================================
+   CONFIGURATION
+   ============================================================ */
+/* CORS FIX: the browser cannot call api.cep.bpcl.in directly (BPCL does not
+   send CORS headers). So we call our own local proxy (server.js) at "/bpcl",
+   and the proxy forwards the request to BPCL from Node.js (no CORS there).
+   Open the dashboard at http://localhost:3000 — NOT by double-clicking the file. */
+/* Opened by double-click (file://): call BPCL directly.
+   Hosted on a website (Netlify etc.): call /bpcl on the same website (the website forwards it to BPCL). */
+var IS_FILE       = location.protocol === 'file:';
+var BASE_URL      = IS_FILE ? 'https://api.cep.bpcl.in' : '/bpcl';
+/* App details (user does not type these — only username and password are asked) */
+var CLIENT_ID     = 'BALAJI_TRANSPORTS';          // OAuth2 client_id
+var CLIENT_SECRET = 'A6VG3B5!zvG@rz2B';           // OAuth2 client_secret
+var TOKEN_MINUTES = 5;                            // BPCL token is valid for 5 minutes
+var ACCOUNT_ID    = 'FA2000597425';               // SmartFleet account ID
+/* ============================================================ */
+
+var TOKEN_URL  = BASE_URL + '/authorizationserver/oauth/token';
+var REPORT_URL = BASE_URL + '/retail/v2/bpcl/smartfleet/report/download';
+
+/* API fields that hold numbers (right-aligned in raw table, saved as numbers in Excel) */
+var NUMERIC_KEYS = {
+  productQty:1, transactionAmount:1, purchaseAmount:1, rate:1, volume:1,
+  petromilesEarned:1, petromilesDeducted:1, petromileRedeemed:1, promotionalPetromiles:1,
+  petromileOpeningBal:1, petromileClosingBal:1, cashBackAmt:1,
+  cmsOpeningBal:1, cmsClosingBal:1, cardWalletOpeningBal:1, cardWalletClosingBal:1,
+  rewardOpeningBal:1, rewardClosingBal:1, availablePartnerCreditBalance:1,
+  addOnCardWalletOpeningBal:1, addOnCardWalletClosingBal:1,
+  meShare:1, tds:1, taxDeduction:1, tcsRate:1, refundCharges:1, transactionFees:1, deductionValue:1
+};
+
+/* Warn if the page was opened as a file instead of through the proxy */
+/* Check that the BPCL Helper is running. If not, tell the user what to do. */
+var HELPER_MISSING_MSG = IS_FILE
+  ? 'The browser blocked the BPCL report (CORS). Fix: (1) install the free Chrome extension "Allow CORS: Access-Control-Allow-Origin", turn it ON, reload this page and click Fetch Data again. OR (2) Logout and use "Open BPCL Report File" with the report downloaded from the BPCL SmartFleet portal.'
+  : 'Could not reach the BPCL server through this website. Check your internet, or check that the /bpcl forwarding rule is set up on the hosting.';
+
+var accessToken = sessionStorage.getItem('bpcl_token') || null;
+var allRecords  = [];
+var filteredRec = [];
+
+function $(id) { return document.getElementById(id); }
+
+function num(v)      { var n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function fmtMoney(n) { return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtNum(n)   { return Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0}); }
+function fmtQty(n)   { return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function byName(a, b) { return String(a).localeCompare(String(b), 'en', {sensitivity:'base'}); }
+
+/* Dealer Credit = paymentMode "Dealer_Credit" or wallet "Dealer Credit" */
+function isDealerCredit(r) {
+  var pm = String(r.paymentMode || '').toLowerCase().replace(/[_\s]+/g, ' ');
+  var w  = String(r.wallet || '').toLowerCase().replace(/[_\s]+/g, ' ');
+  return pm.indexOf('dealer credit') !== -1 || w.indexOf('dealer credit') !== -1;
+}
+
+function showLoading(msg) {
+  $('loadingMsg').textContent = msg || 'Fetching data...';
+  $('loadingOverlay').classList.add('active');
+}
+function hideLoading() { $('loadingOverlay').classList.remove('active'); }
+
+function showAlert(el, msg, type) {
+  type = type || 'info';
+  var icons = { info:'&#8505;', success:'&#9989;', error:'&#10060;', warning:'&#9888;' };
+  el.innerHTML = '<div class="alert alert-' + type + '"><span class="alert-icon">' + icons[type] + '</span>' + esc(msg) + '</div>';
+  el.style.display = 'block';
+}
+function hideAlert(el) { el.style.display = 'none'; }
+
+function toApiDate(val) {
+  /* YYYY-MM-DD to MM-DD-YYYY */
+  if (!val) return '';
+  var p = val.split('-');
+  return p[1] + '-' + p[2] + '-' + p[0];
+}
+
+function parseDate(str) {
+  if (!str) return null;
+  var m;
+  str = String(str).trim();
+  m = str.match(/^(\d{1,2})[- ]([A-Za-z]{3})[A-Za-z]*[- ](\d{4})/);          /* 01-Oct-2026 */
+  if (m) {
+    var months={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    return new Date(+m[3], months[m[2].toLowerCase()], +m[1]);
+  }
+  m = str.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);               /* 01/10/2026 = dd/mm/yyyy */
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  var d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+function recDate(r) { return parseDate(r.txnFormattedDate) || parseDate(r.transactionDate); }
+function dateLabel(d) {
+  var mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return String(d.getDate()).padStart(2,'0') + '-' + mon[d.getMonth()] + '-' + d.getFullYear();
+}
+function dateKey(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+/* Set default dates */
+function setDefaultDates() {
+  var today = new Date();
+  var first = new Date(today.getFullYear(), today.getMonth(), 1);
+  $('startDate').value = dateKey(first);
+  $('endDate').value   = dateKey(today);
+}
+setDefaultDates();
+
+/* ---- LOGIN (username + password) ---- */
+var loginUser = '', loginPass = '';   /* kept only in memory, used again by "Refresh Token" */
+var tokenExpiry = 0;          /* time (ms) when the current token stops working */
+var tokenTimer  = null;
+var loginBusy   = null;       /* the running login, so two clicks do not log in twice */
+
+/* Ask BPCL for a new token using the username/password typed on the login page.
+   Returns a Promise that gives the token. */
+function getNewToken() {
+  if (loginBusy) return loginBusy;
+  if (!loginUser || !loginPass) return Promise.reject(new Error('Please sign in again.'));
+  /* Try 1: client_id / client_secret in the body.
+     Try 2 (if 400/401): client_id / client_secret as "Authorization: Basic" header. */
+  function tokenCall(useBasic) {
+    var b = 'grant_type=password&username=' + encodeURIComponent(loginUser) + '&password=' + encodeURIComponent(loginPass);
+    var h = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    if (useBasic) h['Authorization'] = 'Basic ' + btoa(CLIENT_ID + ':' + CLIENT_SECRET);
+    else b += '&client_id=' + encodeURIComponent(CLIENT_ID) + '&client_secret=' + encodeURIComponent(CLIENT_SECRET);
+    return fetch(TOKEN_URL, { method: 'POST', headers: h, body: b });
+  }
+  function readErr(res) {
+    return res.text().then(function(t) {
+      var msg = '';
+      try { var j = JSON.parse(t); msg = j.error_description || j.message || j.error || ''; } catch (e) { msg = t.slice(0, 200); }
+      throw new Error('Login failed (HTTP ' + res.status + ')' + (msg ? ': ' + msg : '') +
+        (res.status === 401 ? ' — wrong username or password.' : ''));
+    });
+  }
+  loginBusy = tokenCall(false)
+  .then(function(res) {
+    if (res.status === 401 || res.status === 400) return tokenCall(true);
+    return res;
+  })
+  .then(function(res) {
+    if (!res.ok) return readErr(res);
+    return res.json();
+  })
+  .then(function(data) {
+    if (!data.access_token) throw new Error('No access token returned from server.');
+    accessToken = data.access_token;
+    sessionStorage.setItem('bpcl_token', accessToken);
+    /* expiry: from the token itself, else expires_in, else 5 minutes */
+    var t = tokenExp(accessToken);
+    if (t && t.exp) tokenExpiry = t.exp;
+    else if (data.expires_in) tokenExpiry = Date.now() + data.expires_in * 1000;
+    else tokenExpiry = Date.now() + TOKEN_MINUTES * 60000;
+    startTokenTimer();
+    return accessToken;
+  })
+  .catch(function(err) {
+    var m = err.message || 'Login failed.';
+    if (/failed to fetch|networkerror|load failed/i.test(m)) m = HELPER_MISSING_MSG;
+    throw new Error(m);
+  })
+  .finally(function() { loginBusy = null; });
+  return loginBusy;
+}
+
+/* "Sign In" button / Enter key */
+function doLogin(e) {
+  if (e) e.preventDefault();
+  var u = $('username').value.trim(), p = $('password').value;
+  if (!u || !p) { showAlert($('loginAlert'), 'Please enter username and password.', 'warning'); return; }
+  loginUser = u; loginPass = p;
+  if ($('rememberMe') && $('rememberMe').checked) {
+    try {
+      localStorage.setItem('bpcl_saved_user', u);
+      localStorage.setItem('bpcl_saved_pass', btoa(p));
+    } catch(e) {}
+  }
+  $('loginBtn').disabled = true; $('loginBtn').textContent = 'Signing in...';
+  hideAlert($('loginAlert'));
+  showLoading('Signing in to BPCL...');
+  getNewToken()
+  .then(function() {
+    $('password').value = '';
+    showDashboard(u);
+    showAlert($('alertBox'), 'Signed in. Token valid till ' + new Date(tokenExpiry).toLocaleTimeString('en-IN') +
+      ' (about ' + Math.max(1, Math.round((tokenExpiry - Date.now()) / 60000)) + ' min). Select dates and click Fetch Data.', 'success');
+  })
+  .catch(function(err) {
+    loginUser = ''; loginPass = '';
+    showAlert($('loginAlert'), err.message, 'error');
+    $('password').focus();
+  })
+  .finally(function() {
+    hideLoading();
+    $('loginBtn').disabled = false; $('loginBtn').textContent = 'Sign In';
+  });
+}
+
+function togglePass() {
+  var i = $('password'), b = $('passToggle');
+  var show = i.type === 'password';
+  i.type = show ? 'text' : 'password';
+  b.textContent = show ? 'Hide' : 'Show';
+  b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+}
+
+/* "Refresh Token" button */
+function refreshToken() {
+  var btn = $('refreshBtn');
+  btn.disabled = true; btn.innerHTML = 'Refreshing...';
+  getNewToken()
+  .then(function() {
+    showAlert($('alertBox'), 'New token received. Valid till ' + new Date(tokenExpiry).toLocaleTimeString('en-IN') + '. You can Fetch Data now.', 'success');
+  })
+  .catch(function(err) { showAlert($('alertBox'), err.message, 'error'); })
+  .finally(function() { btn.disabled = false; btn.innerHTML = '&#10227;<span class="rt-text"> Refresh Token</span>'; });
+}
+
+/* Token is usable only if it has more than 10 seconds left */
+function tokenValid() { return !!accessToken && tokenExpiry - Date.now() > 10000; }
+
+/* Gives a working token: the current one, or a new one if it has expired */
+function ensureToken() {
+  if (tokenValid()) return Promise.resolve(accessToken);
+  showLoading('Token expired — getting a new token...');
+  return getNewToken();
+}
+
+/* Countdown shown in the header: "Token: 4:32 left" */
+function startTokenTimer() {
+  if (tokenTimer) clearInterval(tokenTimer);
+  updateTokenBadge();
+  tokenTimer = setInterval(updateTokenBadge, 1000);
+}
+function updateTokenBadge() {
+  var b = $('tokenBadge'), btn = $('refreshBtn');
+  if (fileMode || !accessToken) { b.style.display = 'none'; btn.style.display = 'none'; return; }
+  b.style.display = 'inline-block'; btn.style.display = 'inline-flex';
+  var left = Math.max(0, Math.floor((tokenExpiry - Date.now()) / 1000));
+  b.classList.remove('low', 'expired');
+  btn.classList.remove('attention');
+  if (left <= 0) {
+    b.textContent = 'Token expired';
+    b.classList.add('expired');
+    btn.classList.add('attention');
+  } else {
+    var m = Math.floor(left / 60), sec = left % 60;
+    b.textContent = 'Token: ' + m + ':' + String(sec).padStart(2, '0') + ' left';
+    if (left <= 60) b.classList.add('low');
+  }
+}
+
+/* Read expiry time from the token (JWT) */
+function tokenExp(tok) {
+  try {
+    var part = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (part.length % 4) part += '=';
+    var d = JSON.parse(atob(part));
+    return { exp: d.exp ? d.exp * 1000 : 0, user: d.sub || '' };
+  } catch (e) { return null; }
+}
+
+function showDashboard(user) {
+  $('loginScreen').style.display = 'none';
+  $('dashboard').style.display = 'block';
+  $('printBtn').style.display  = 'inline-flex';
+  $('logoutBtn').style.display = 'inline-flex';
+  $('logoutBtn').textContent = fileMode ? 'Close File' : 'Logout';
+  var u = user || '';
+  if (u) { $('userLabel').textContent = u; $('userLabel').style.display = 'inline'; }
+  else $('userLabel').style.display = 'none';
+  $('footAccount').textContent = ACCOUNT_ID;
+  $('footnote').style.display = 'block';
+  updateTokenBadge();
+}
+
+/* "Logout" button: forget the token and password, go back to the login page */
+function logout() {
+  accessToken = null; tokenExpiry = 0; loginUser = ''; loginPass = '';
+  if (tokenTimer) { clearInterval(tokenTimer); tokenTimer = null; }
+  sessionStorage.removeItem('bpcl_token');
+  allRecords = []; filteredRec = [];
+  fileMode = false; fileRecords = [];
+  $('apiConfigBar').style.display = '';
+  $('fetchBtn').textContent = 'Fetch Data';
+  hideAlert($('alertBox'));
+  $('dashboard').style.display = 'none';
+  $('loginScreen').style.display = 'flex';
+  ['logoutBtn','printBtn','userLabel','tokenBadge','refreshBtn'].forEach(function(id) { $(id).style.display = 'none'; });
+  $('footnote').style.display = 'none';
+  $('password').value = '';
+  $('password').type = 'password'; $('passToggle').textContent = 'Show';
+  hideAlert($('loginAlert'));
+  $('username').focus();
+}
+
+/* Page opened: show the login page */
+$('dashboard').style.display = 'none';
+sessionStorage.removeItem('bpcl_token');
+accessToken = null;
+
+function toggleApiConfig() {
+  var body = $('apiConfigBody');
+  var icon = $('apiConfigToggleIcon');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    icon.innerHTML = '&#9660; Click to collapse';
+  } else {
+    body.style.display = 'none';
+    icon.innerHTML = '&#9658; Click to expand';
+  }
+}
+
+/* ---- CONSOLIDATED CSV -> records (same field names as the JSON API) ---- */
+function parseCsv(text) {
+  var rows = [], row = [], f = '', q = false, i, c;
+  for (i = 0; i < text.length; i++) {
+    c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f.replace(/\r$/, '')); rows.push(row); row = []; f = ''; }
+    else f += c;
+  }
+  if (f !== '' || row.length) { row.push(f.replace(/\r$/, '')); rows.push(row); }
+  return rows;
+}
+var CSV_MAP = {
+  'Transaction Id': 'transactionId', 'Transaction Date': 'txnFormattedDate', 'Transaction Time': 'txnFormattedTime',
+  'Transaction Mode': 'txnSource', 'Name of Card': 'cardName', 'Card Number': 'cardNumber',
+  'Vehicle Number': 'vehicleNo', 'Mobile Number': 'mobileNumber',
+  'Fuel Station Name (Retail Outlet Name)': 'roName', 'Fuel Station (Retail Outlet) City': 'roCity',
+  'Transaction Type': 'wallet', 'Transaction Category': 'transactionType', 'Product Name': 'productName',
+  'Product Volume / Quantity (Litres)': 'productQty', 'Rate (Rs. / Litre)': 'rate',
+  'Fuel Amount (Rs.)': 'purchaseAmount', 'TCS Amount (Rs.)': 'tcsAmount', 'TCS Rate (%)': 'tcsRate',
+  'Deduction Value': 'deductionValue', 'Total Transaction Amount (Rs.)': 'transactionAmount',
+  'Transaction Remarks': 'remarks', 'Closing CMS Balance (Rs.)': 'cmsClosingBal',
+  'Closing Card Wallet Balance (Rs.)': 'cardWalletClosingBal', 'Closing Rewards Balance (Rs.)': 'rewardClosingBal',
+  'Fueled Vehicle': 'fueledVehicle', 'Original Transaction Id': 'originalTxnId',
+  'Dealer Credit settlement status': 'settlementStatus', 'Dealer Credit Settlement Date': 'dealerSettlementDate'
+};
+function consolidatedCsvToRecords(text) { return rowsToRecords(parseCsv(text || '')); }
+var CSV_MAP_LC = null;
+function rowsToRecords(rows) {
+  var h = -1;
+  if (!CSV_MAP_LC) { CSV_MAP_LC = {}; Object.keys(CSV_MAP).forEach(function(k) { CSV_MAP_LC[k.toLowerCase().replace(/\s+/g, ' ')] = CSV_MAP[k]; }); }
+  rows = rows.map(function(r) { return r.map(function(x) { return x == null ? '' : String(x); }); });
+  for (var i = 0; i < rows.length; i++) {
+    var lc = rows[i].map(function(x) { return x.replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[_\s]+/g, ''); });
+    var hasId = lc.some(function(x) { return x === 'transactionid'; });
+    var hasCatOrType = lc.some(function(x) { return x === 'transactioncategory' || x === 'transactiontype'; });
+    if (hasId && hasCatOrType) { h = i; break; }
+  }
+  if (h === -1) throw new Error('Transaction table not recognized (need columns for Transaction Id and Category/Type).');
+  /* header names: blank headers get "Column N", repeated headers get "(2)", "(3)" so no value is lost */
+  var used = {};
+  var head = rows[h].map(function(x, c) {
+    var orig = String(x).replace(/^\uFEFF/, '').trim();
+    var clean_lc = orig.toLowerCase().replace(/\s+/g, ' ');
+    var k = orig ? (CSV_MAP[orig] || CSV_MAP_LC[clean_lc] || orig) : 'Column ' + (c + 1);
+    if (used[k]) { used[k]++; k = k + ' (' + used[k] + ')'; } else used[k] = 1;
+    return k;
+  });
+  var headLine = rows[h].join('|');
+  var out = [];
+  for (var j = h + 1; j < rows.length; j++) {
+    var r = rows[j], rec = {};
+    var filled = r.filter(function(x) { return String(x).trim() !== ''; }).length;
+    if (!filled) continue;                                 /* empty line */
+    if (r.join('|') === headLine) continue;                /* header repeated inside the file */
+    if (filled < 3) continue;                              /* footer / note line */
+    if (/^\s*(grand\s*)?total\b/i.test(String(r[0] || ''))) continue;   /* total line at the bottom */
+    var width = Math.max(head.length, r.length);
+    for (var c = 0; c < width; c++) {
+      var key = head[c] || ('Column ' + (c + 1));
+      rec[key] = r[c] == null ? '' : String(r[c]).trim();
+    }
+    if (rec.wallet && !rec.paymentMode) rec.paymentMode = rec.wallet;
+    if (rec.paymentMode && !rec.wallet) rec.wallet = rec.paymentMode;
+    if (rec.txnFormattedDate && rec.txnFormattedTime && !rec.transactionDate) {
+      rec.transactionDate = rec.txnFormattedDate + ' ' + rec.txnFormattedTime;
+    }
+    out.push(rec);
+  }
+  return out;
+}
+
+/* ---- add the full JSON API fields to the CSV records (match on transactionId) ---- */
+var apiKeyOrder = [];
+function mergeApiFields(recs, apiRecs) {
+  var byId = {}, seenKey = {};
+  apiKeyOrder = [];
+  apiRecs.forEach(function(a) {
+    Object.keys(a).forEach(function(k) { if (!seenKey[k]) { seenKey[k] = true; apiKeyOrder.push(k); } });
+    if (a.transactionId) byId[String(a.transactionId).trim()] = a;
+  });
+  var joined = 0;
+  recs.forEach(function(r) {
+    var a = byId[String(r.transactionId || '').trim()];
+    if (!a) return;
+    joined++;
+    Object.keys(a).forEach(function(k) {
+      var v = a[k];
+      /* never overwrite a value the CSV already has (the calculations use the CSV values) */
+      if (!(k in r) || r[k] === '' || r[k] == null) r[k] = v;
+    });
+  });
+  return joined;
+}
+
+/* Dealer Credit sale is SETTLED when BPCL has given a settlement date / settlement id,
+   or the status itself says SETTLED / COMPLETED / PAID. Everything else is PENDING. */
+function isDcSettled(r) {
+  if (String(r.dealerSettlementDate || '').trim() && String(r.dealerSettlementDate).trim() !== '-') return true;
+  if (String(r.dealerSettlementId || '').trim() && String(r.dealerSettlementId).trim() !== '-') return true;
+  var st = String(r.settlementStatus || '').toUpperCase();
+  if (st.indexOf('SAP') !== -1) return false;            /* SAP_POSTING_SETTLED = BPCL's own accounting, not the credit payment */
+  if (/UNSETTLED|NOT[ _]?SETTLED|PENDING|FAIL/.test(st)) return false;
+  return /SETTLED|COMPLETED|PAID/.test(st);
+}
+
+/* ============================================================
+   OPEN REPORT FILE  (works when the HTML is opened by double-click, no server needed)
+   - Consolidated report (.csv / .xlsx)  = same as Excel MASTER sheet
+   - SALES_TRANSACTION report (.json)    = all API fields (adds settlement details)
+   ============================================================ */
+var fileMode = false, fileRecords = [];
+
+function readFileAs(file, how) {
+  return new Promise(function(ok, bad) {
+    var fr = new FileReader();
+    fr.onload = function() { ok(fr.result); };
+    fr.onerror = function() { bad(new Error('Could not read ' + file.name)); };
+    if (how === 'buffer') fr.readAsArrayBuffer(file); else fr.readAsText(file);
+  });
+}
+function loadSheetJs() {
+  if (typeof XLSX !== 'undefined') return Promise.resolve();
+  return new Promise(function(ok, bad) {
+    var sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload = function() { ok(); };
+    sc.onerror = function() { bad(new Error('To open Excel files the computer needs internet once. Or save the Excel file as CSV and open that.')); };
+    document.head.appendChild(sc);
+  });
+}
+function excelToRecords(buf) {
+  var wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  for (var i = 0; i < wb.SheetNames.length; i++) {
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[i]], { header: 1, raw: false, dateNF: 'dd-mmm-yyyy', defval: '' });
+    try { return rowsToRecords(rows); } catch (e) { /* try next sheet */ }
+  }
+  throw new Error('No transaction table found in this Excel file (need columns "Transaction Id" and "Transaction Category").');
+}
+function jsonTextToRecords(text) {
+  var body = JSON.parse(text);
+  var recs = Array.isArray(body) ? body : (body.data || body.records || body.transactions || []);
+  if (!Array.isArray(recs)) throw new Error('JSON file has no list of transactions.');
+  return recs;
+}
+function fileToRecords(file) {
+  var n = file.name.toLowerCase();
+  if (/\.xlsx?$/.test(n)) {
+    return loadSheetJs().then(function() { return readFileAs(file, 'buffer'); })
+      .then(function(buf) { return { kind: 'table', recs: excelToRecords(buf) }; });
+  }
+  return readFileAs(file, 'text').then(function(t) {
+    var s = t.replace(/^\uFEFF/, '').trim();
+    if (s.charAt(0) === '[' || s.charAt(0) === '{') return { kind: 'json', recs: jsonTextToRecords(s) };
+    return { kind: 'table', recs: consolidatedCsvToRecords(s) };
+  });
+}
+
+function openReportFiles(files) {
+  files = Array.prototype.slice.call(files || []);
+  if (!files.length) return;
+  showLoading('Reading file...');
+  Promise.all(files.map(fileToRecords))
+  .then(function(parts) {
+    var table = [], json = [];
+    parts.forEach(function(p) { (p.kind === 'json' ? json : table).push.apply(p.kind === 'json' ? json : table, p.recs); });
+    var recs, joined = null;
+    if (table.length) { recs = table; if (json.length) { apiKeyOrder = []; joined = mergeApiFields(recs, json); } }
+    else recs = json;
+    if (!recs.length) throw new Error('No transactions found in the file.');
+    fileMode = true; fileRecords = recs;
+    showDashboard('');
+    $('apiConfigBar').style.display = 'none';
+    $('fetchBtn').textContent = 'Apply Dates';
+    /* date range = first and last day in the file */
+    var ds = recs.map(recDate).filter(Boolean).sort(function(a, b) { return a - b; });
+    if (ds.length) { $('startDate').value = dateKey(ds[0]); $('endDate').value = dateKey(ds[ds.length - 1]); }
+    applyFileDates();
+    var msg = 'Opened ' + files.map(function(f) { return f.name; }).join(', ') + ' — ' + recs.length.toLocaleString('en-IN') + ' records.';
+    if (joined != null) msg += ' Settlement details added to ' + joined.toLocaleString('en-IN') + ' transactions.';
+    if (!table.length) msg += ' Tip: for full totals (Recharge, Credit Settlement) open the Consolidated report (.csv / .xlsx) too.';
+    showAlert($('alertBox'), msg, 'success');
+  })
+  .catch(function(err) { showAlert($('loginAlert'), err.message || 'Could not open the file.', 'error'); })
+  .finally(function() { hideLoading(); $('reportFile').value = ''; });
+}
+
+function applyFileDates() {
+  var sd = $('startDate').value, ed = $('endDate').value;
+  if (sd && ed && sd > ed) { showAlert($('alertBox'), 'Start date cannot be after end date.', 'warning'); return; }
+  allRecords = fileRecords.filter(function(r) {
+    var d = recDate(r); if (!d) return true;
+    var k = dateKey(d);
+    return (!sd || k >= sd) && (!ed || k <= ed);
+  });
+  $('footTime').textContent = new Date().toLocaleString('en-IN');
+  buildUI();
+}
+
+/* drag & drop on the login card */
+
+function loadOctoberDataDirectly() {
+  showLoading('Loading October 2026 data...');
+  fetch('/october-data')
+  .then(function(res) {
+    if (!res.ok) throw new Error('October data file not found on server.');
+    return res.arrayBuffer();
+  })
+  .then(function(buf) {
+    var recs = excelToRecords(buf);
+    if (!recs || !recs.length) throw new Error('No records loaded from October data.');
+    fileMode = true;
+    fileRecords = recs;
+    showDashboard('Balaji Transports');
+    $('apiConfigBar').style.display = 'none';
+    $('fetchBtn').textContent = 'Apply Dates';
+    var ds = recs.map(recDate).filter(Boolean).sort(function(a, b) { return a - b; });
+    if (ds.length) { $('startDate').value = dateKey(ds[0]); $('endDate').value = dateKey(ds[ds.length - 1]); }
+    applyFileDates();
+    showAlert($('alertBox'), 'Loaded October 2026 data (' + recs.length.toLocaleString('en-IN') + ' records). Filter by Vinayaka Fuel Station below!', 'success');
+  })
+  .catch(function(err) {
+    showAlert($('loginAlert'), 'Could not auto-load: ' + err.message + ' Click "Browse Report File" to select manually.', 'warning');
+  })
+  .finally(hideLoading);
+}
+
+// Auto-restore saved login
+window.addEventListener('DOMContentLoaded', function() {
+  try {
+    var savedU = localStorage.getItem('bpcl_saved_user');
+    var savedP = localStorage.getItem('bpcl_saved_pass');
+    if (savedU && $('username')) $('username').value = savedU;
+    if (savedP && $('password')) $('password').value = atob(savedP);
+  } catch(e) {}
+});
+
+window.addEventListener('DOMContentLoaded', function() {
+  var dz = $('dropZone'); if (!dz) return;
+  ['dragenter','dragover'].forEach(function(ev) { dz.addEventListener(ev, function(e) { e.preventDefault(); dz.classList.add('over'); }); });
+  ['dragleave','drop'].forEach(function(ev) { dz.addEventListener(ev, function(e) { e.preventDefault(); dz.classList.remove('over'); }); });
+  dz.addEventListener('drop', function(e) { openReportFiles(e.dataTransfer.files); });
+});
+
+/* ---- Turn whatever BPCL sent back into records ----
+   BPCL can send: CSV text, an Excel file, a JSON list, or JSON that holds
+   a download link / base64 file. All of these are handled here. */
+function previewOf(r) {
+  var t = (r.text || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+  return ' [Type: ' + (r.ctype || 'unknown') + ' · Size: ' + (r.buf ? r.buf.byteLength : 0) + ' bytes · Starts with: "' + t + '"]';
+}
+function b64ToBuf(b64) {
+  var bin = atob(b64.replace(/^data:[^,]*,/, '').replace(/\s+/g, ''));
+  var u = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u.buffer;
+}
+function reportToRecords(r, depth) {
+  var bytes = new Uint8Array(r.buf || new ArrayBuffer(0));
+  /* 1. Excel file (xlsx = zip, starts with "PK") or old .xls */
+  if ((bytes[0] === 0x50 && bytes[1] === 0x4B) || (bytes[0] === 0xD0 && bytes[1] === 0xCF)) {
+    return loadSheetJs().then(function() { return excelToRecords(r.buf); });
+  }
+  var t = (r.text || '').replace(/^\uFEFF/, '').trim();
+  if (!t) {
+    if (r.viaLink) return Promise.reject(Object.assign(new Error(
+      'BPCL sent back an EMPTY report. Reason: the browser blocked the normal request (CORS), so the token was sent inside the link, and BPCL does not accept it that way. ' +
+      'FIX: click the "Allow CORS" extension icon, open its Options and turn ON "Access-Control-Allow-Headers" and "Fix 403 / OPTIONS (preflight)", make sure the extension is ON, reload this page, sign in and click Fetch Data.'), { keep: true }));
+    return Promise.reject(new Error('BPCL sent back an EMPTY report (HTTP ' + (r.status || '?') + '). There may be no transactions for these dates / account ID. Try a different date range.'));
+  }
+  /* 2. JSON */
+  if (t.charAt(0) === '[' || t.charAt(0) === '{') {
+    var body;
+    try { body = JSON.parse(t); } catch (e) { return Promise.reject(new Error('BPCL sent back broken JSON.' + previewOf(r))); }
+    if (Array.isArray(body)) return Promise.resolve(body);
+    var list = body.data || body.records || body.transactions || body.result || body.response;
+    if (Array.isArray(list)) return Promise.resolve(list);
+    if (depth < 2) {
+      /* look for a download link or a base64 file inside the JSON */
+      var found = null;
+      (function walk(o) {
+        if (found || !o || typeof o !== 'object') return;
+        Object.keys(o).forEach(function(k) {
+          var v = o[k];
+          if (found) return;
+          if (typeof v === 'string') {
+            if (/^https?:\/\//i.test(v)) found = { url: v };
+            else if (v.length > 200 && /^[A-Za-z0-9+\/=\s]+$/.test(v.replace(/^data:[^,]*,/, ''))) found = { b64: v };
+          } else if (Array.isArray(v) && v.length && typeof v[0] === 'object') { found = { list: v }; }
+          else walk(v);
+        });
+      })(body);
+      if (found && found.list) return Promise.resolve(found.list);
+      if (found && found.b64) {
+        var buf = b64ToBuf(found.b64);
+        return reportToRecords({ buf: buf, text: new TextDecoder('utf-8').decode(buf), ctype: 'base64 file' }, depth + 1);
+      }
+      if (found && found.url) {
+        return fetch(found.url).then(function(res2) {
+          return res2.arrayBuffer().then(function(b2) {
+            return reportToRecords({ buf: b2, text: new TextDecoder('utf-8').decode(b2), ctype: res2.headers.get('content-type') || '' }, depth + 1);
+          });
+        });
+      }
+    }
+    return Promise.reject(new Error('BPCL sent back JSON without transactions.' + previewOf(r)));
+  }
+  /* 3. HTML page = error / login page */
+  if (t.charAt(0) === '<') return Promise.reject(new Error('BPCL sent back a web page instead of the report (maybe the token expired — sign in again).' + previewOf(r)));
+  /* 4. CSV text */
+  try { return Promise.resolve(consolidatedCsvToRecords(t)); }
+  catch (e) { return Promise.reject(new Error('Could not find the transaction table in the report.' + previewOf(r))); }
+}
+
+/* ============================================================
+   EXPORT EXCEL — every record, ALL columns the API returned
+   (nested fields like walletBalance are turned into text)
+   ============================================================ */
+function cellText(v) {
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.map(function(x) {
+    if (x && typeof x === 'object') return Object.keys(x).map(function(k) { return k + ': ' + cellText(x[k]); }).join(', ');
+    return String(x);
+  }).join(' | ');
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+function flatRow(r) {
+  var out = {};
+  (function walk(o, pre) {
+    Object.keys(o).forEach(function(k) {
+      var v = o[k], key = pre ? pre + '.' + k : k;
+      if (v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length) walk(v, key);
+      else out[key] = v;
+    });
+  })(r || {}, '');
+  return out;
+}
+var NUM_COLS = { productQty:1, transactionAmount:1, purchaseAmount:1, rate:1, volume:1, petromilesEarned:1, petromilesDeducted:1,
+  petromileRedeemed:1, promotionalPetromiles:1, petromileOpeningBal:1, petromileClosingBal:1, cashBackAmt:1, cmsOpeningBal:1, cmsClosingBal:1,
+  cardWalletOpeningBal:1, cardWalletClosingBal:1, rewardOpeningBal:1, rewardClosingBal:1, availablePartnerCreditBalance:1,
+  addOnCardWalletOpeningBal:1, addOnCardWalletClosingBal:1, meShare:1, tds:1, taxDeduction:1, tcsRate:1, tcsAmount:1,
+  refundCharges:1, transactionFees:1, deductionValue:1 };
+
+function exportAllExcel() {
+  var recs = filteredRec && filteredRec.length ? filteredRec : allRecords;
+  if (!recs || !recs.length) { showAlert($('alertBox'), 'No data to export. Fetch data first.', 'warning'); return; }
+  var flat = recs.map(flatRow);
+  /* column order: same order as the BPCL API, then any extra columns */
+  var cols = [], seen = {};
+  function add(k) { if (!seen[k]) { seen[k] = true; cols.push(k); } }
+  (apiKeyOrder || []).forEach(function(k) { flat.forEach(function(f) { Object.keys(f).forEach(function(fk) { if (fk === k || fk.indexOf(k + '.') === 0) add(fk); }); }); });
+  flat.forEach(function(f) { Object.keys(f).forEach(add); });
+  var header = ['Calculation Group'].concat(cols);
+  var rows = flat.map(function(f, i) {
+    return [GROUP_LABEL[groupOf(recs[i])] || ''].concat(cols.map(function(k) {
+      var t = cellText(f[k]);
+      if (NUM_COLS[k] && /^-?\d+(\.\d+)?$/.test(t.trim())) return parseFloat(t);   /* real numbers so Excel can SUM */
+      return t;                                                                 /* IDs / card numbers stay text */
+    }));
+  });
+  var accId = ($('cfgAccountId').value.trim() || ACCOUNT_ID);
+  var fname = 'BPCL_Data_' + accId + '_' + $('startDate').value + '_to_' + $('endDate').value;
+
+  showLoading('Preparing Excel...');
+  loadSheetJs().then(function() {
+    var ws = XLSX.utils.aoa_to_sheet([header].concat(rows));
+    ws['!cols'] = header.map(function(h, i) {
+      var w = h.length;
+      rows.slice(0, 300).forEach(function(r) { var l = String(r[i]).length; if (l > w) w = l; });
+      return { wch: Math.min(Math.max(w + 2, 10), 45) };
+    });
+    ws['!autofilter'] = { ref: ws['!ref'] };
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'All Data');
+    XLSX.writeFile(wb, fname + '.xlsx');
+    showAlert($('alertBox'), 'Excel downloaded: ' + fmtNum(rows.length) + ' records × ' + header.length + ' columns.', 'success');
+  }).catch(function() {
+    /* no internet for the Excel library -> CSV (opens in Excel too) */
+    var csv = [header].concat(rows).map(function(r) {
+      return r.map(function(v) { v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',');
+    }).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = fname + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+    showAlert($('alertBox'), 'Downloaded as CSV (opens in Excel): ' + fmtNum(rows.length) + ' records × ' + header.length + ' columns.', 'success');
+  }).finally(hideLoading);
+}
+
+/* ---- FETCH DATA ---- */
+var tokenInUrl = false;
+function fetchData() {
+  if (fileMode) { applyFileDates(); return; }
+  var sd = $('startDate').value;
+  var ed = $('endDate').value;
+  if (!sd || !ed) { showAlert($('alertBox'), 'Please select both start and end dates.', 'warning'); return; }
+  if (sd > ed)    { showAlert($('alertBox'), 'Start date cannot be after end date.', 'warning'); return; }
+
+  hideAlert($('alertBox'));
+  showLoading('Loading transaction data...');
+  $('fetchBtn').disabled = true;
+
+  /* FIX (tested with live API, Sept-2026):
+     - SALES_TRANSACTION (json) has ONLY card sales + reversals. It does NOT have
+       HDFCVirtual RECHARGE, PetroMiles REDEEM or CMS CREDIT_SETTLEMENT rows.
+     - reportType=CONSOLIDATED with fileFormat=csv returns the full
+       "Consolidated Transaction history report" = the same file as the Excel MASTER sheet.
+       (CONSOLIDATED + json returns an empty body, so csv is required.)
+     - RECHARGE / REDEMPTION are NOT valid BPCL report types (HTTP 400).            */
+  var type = $('cfgReportType').value;
+  var accId = $('cfgAccountId').value.trim() || ACCOUNT_ID;
+  $('footAccount').textContent = accId;
+  var fmt = type === 'CONSOLIDATED' ? 'csv' : $('cfgFileFormat').value;
+
+  var params = 'reportType=' + encodeURIComponent(type) +
+               '&accountId=' + encodeURIComponent(accId) +
+               '&fileFormat=' + encodeURIComponent(fmt) +
+               '&isDownload=' + encodeURIComponent($('cfgIsDownload').value) +
+               '&selected_Period=' + encodeURIComponent($('cfgSelectedPeriod').value) +
+               '&channel=' + encodeURIComponent($('cfgChannel').value) +
+               '&startDate=' + encodeURIComponent(toApiDate(sd)) +
+               '&endDate='   + encodeURIComponent(toApiDate(ed));
+
+  /* Try 1: token in the "Authorization" header (normal way).
+     Try 2: if the browser blocks that (CORS "preflight" error when the HTML is opened by double-click),
+            send the token inside the link (?access_token=...). A plain link needs no "preflight" check. */
+  function getReport(p) {
+    tokenInUrl = false;
+    var call = fetch(REPORT_URL + '?' + p, { headers: { 'Authorization': 'Bearer ' + accessToken } })
+          .catch(function(e) {
+            if (!(e instanceof TypeError)) throw e;
+            tokenInUrl = true;
+            return fetch(REPORT_URL + '?' + p + '&access_token=' + encodeURIComponent(accessToken));
+          });
+    return call
+    .then(function(res) {
+      if (res.status === 401) { var e = new Error('401'); e.is401 = true; throw e; }
+      return res.arrayBuffer().then(function(buf) {
+        var t = new TextDecoder('utf-8').decode(buf);
+        if (!res.ok) {
+          var m = '';
+          try { var j = JSON.parse(t); m = (j.errors && j.errors[0] && j.errors[0].message) || j.message || ''; } catch (e) {}
+          throw new Error('API error: HTTP ' + res.status + (m ? ' — ' + m : ''));
+        }
+        return { buf: buf, text: t, ctype: res.headers.get('content-type') || '', status: res.status, viaLink: tokenInUrl };
+      });
+    });
+  }
+  function jsonToRecords(r) { return reportToRecords(r, 0); }
+
+  apiKeyOrder = [];
+  var retried = false;
+  function getReportSafe(p) {
+    return ensureToken().then(function() {
+      showLoading('Loading transaction data...');
+      return getReport(p);
+    }).catch(function(e) {
+      /* token rejected (401): get a new token once and try again */
+      if (e.is401 && !retried) {
+        retried = true; accessToken = null; tokenExpiry = 0;
+        return getNewToken().then(function() { return getReport(p); });
+      }
+      throw e;
+    });
+  }
+  getReportSafe(params)
+  .then(function(rep1) { return reportToRecords(rep1, 0); })
+  .then(function(firstRecs) {
+    if (fmt !== 'csv') return { recs: firstRecs };
+    /* The CONSOLIDATED csv has only ~30 columns. The SALES_TRANSACTION json has all 100+ API fields
+       (roLocation, sapDocNumber, settlementStatus, ...). Fetch it too and join on transactionId,
+       so the Raw Data table shows every field. */
+    var recs = firstRecs;
+    var p2 = params.replace('reportType=' + encodeURIComponent(type), 'reportType=SALES_TRANSACTION')
+                   .replace('&fileFormat=' + encodeURIComponent(fmt), '&fileFormat=json');
+    return getReportSafe(p2).then(jsonToRecords).then(function(apiRecs) {
+      return { recs: recs, joined: mergeApiFields(recs, apiRecs) };
+    }).catch(function(e) {
+      if (e.is401) throw e;
+      return { recs: recs, joinErr: e.message || 'unknown error' };
+    });
+  })
+  .then(function(res) {
+    var recs = res.recs;
+    allRecords = recs;
+    $('footTime').textContent = new Date().toLocaleString('en-IN');
+    buildUI();
+    var cnt = recs.filter(function(r) { return groupOf(r) === 'CONSUMPTION'; }).length;
+    var hasCat = {};
+    recs.forEach(function(r) { hasCat[category(r)] = true; });
+    var missing = [];
+    if (!hasCat.RECHARGE) missing.push('RECHARGE');
+    if (!hasCat.CREDIT_SETTLEMENT && recs.some(isDealerCredit)) missing.push('CREDIT_SETTLEMENT');
+    var msg = 'Loaded ' + recs.length.toLocaleString('en-IN') + ' records from ' + type + ' report (' +
+      cnt.toLocaleString('en-IN') + ' added to Fuel Expense, ' + (recs.length - cnt).toLocaleString('en-IN') + ' shown separately or excluded).';
+    if (res.joined != null) msg += ' Settlement details added to ' + res.joined.toLocaleString('en-IN') + ' card transactions.';
+    if (res.joinErr) msg += ' (Could not load extra settlement details: ' + res.joinErr + ')';
+    if (missing.length && type !== 'CONSOLIDATED') msg += ' NOTE: this report has no ' + missing.join(' / ') +
+      ' rows, so totals will not match the Excel PRINT sheet. Use Report Type = CONSOLIDATED.';
+    showAlert($('alertBox'), msg, (missing.length && type !== 'CONSOLIDATED') ? 'warning' : 'success');
+  })
+  .catch(function(err) {
+    if (err.is401) {
+      err = new Error('Token not accepted (HTTP 401), even after getting a new token. Click "Refresh Token" and try Fetch Data again, or Logout and sign in again.');
+      err.is401 = true;
+      updateTokenBadge();
+    }
+    var msg = err.message || 'Unknown error';
+    var lm = msg.toLowerCase();
+    if (!err.keep && !err.is401 && (lm.indexOf('fetch') !== -1 || lm.indexOf('cors') !== -1 || lm.indexOf('network') !== -1)) {
+      msg = HELPER_MISSING_MSG;
+    }
+    showAlert($('alertBox'), msg, 'error');
+  })
+  .finally(function() {
+    hideLoading();
+    $('fetchBtn').disabled = false;
+  });
+}
+
+/* ============================================================
+   CALCULATION RULES  (same as Excel "PRINT" sheet)
+   ------------------------------------------------------------
+   Counted in consumption (station columns):
+     - CMS  SALE
+     - CMS  CREDIT_SETTLEMENT   (BPCL collecting Dealer Credit -> VINAYAKA)
+     - Rewards SALE, Rewards + CMS SALE
+   Shown separately, NOT in consumption:
+     - HDFCVirtual RECHARGE     -> "HDFCVirtual" column
+     - PetroMiles REDEEM        -> "PetroMiles" column
+     - Dealer Credit SALE       -> Dealer Credit tables (settled later via CREDIT_SETTLEMENT)
+   Not counted anywhere:
+     - REVERSED rows and the original transaction they reverse (originalTxnId)
+     - any other / unknown category
+   ============================================================ */
+var GROUP_LABEL = {
+  CONSUMPTION:   'Counted (Fuel Expense)',
+  RECHARGE:      'Recharge (HDFCVirtual)',
+  PETROMILES:    'PetroMiles Redeem',
+  DEALER_CREDIT: 'Dealer Credit (separate)',
+  REVERSAL:      'Reversal (excluded)',
+  REVERSED_ORIG: 'Reversed original (excluded)',
+  OTHER:         'Other (excluded)'
+};
+var GROUP_REASON = {
+  RECHARGE:      'Money added to the account. Shown in HDFCVirtual column, not added to Fuel Expense.',
+  PETROMILES:    'PetroMiles converted to money. Shown in PetroMiles column, not added to Fuel Expense.',
+  DEALER_CREDIT: 'Paid later by BPCL through CMS CREDIT_SETTLEMENT. Counting it too would double the amount.',
+  REVERSAL:      'Reversal entry. Not counted.',
+  REVERSED_ORIG: 'This sale was reversed (cancelled). Not counted.',
+  OTHER:         'Unknown category. Not counted.'
+};
+var recGroup = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
+function groupOf(r) { return recGroup.get(r) || 'OTHER'; }
+
+function norm(s) { return String(s == null ? '' : s).toLowerCase().replace(/[_\-\s]+/g, ' ').trim(); }
+
+/* Portal "Transaction Type" (wallet): CMS / Dealer Credit / HDFCVirtual / PetroMiles / Rewards / Rewards + CMS */
+function walletType(r) {
+  var src = [r.paymentMode, r.wallet];
+  for (var i = 0; i < src.length; i++) {
+    var n = norm(src[i]);
+    if (!n) continue;
+    if (n.indexOf('dealer') !== -1)                              return 'Dealer Credit';
+    if (n.indexOf('hdfc') !== -1 || n.indexOf('virtual') !== -1) return 'HDFCVirtual';
+    if (n.indexOf('reward') !== -1 && n.indexOf('cms') !== -1)   return 'Rewards + CMS';
+    if (n.indexOf('reward') !== -1)                              return 'Rewards';
+    if (n.indexOf('petromile') !== -1)                           return 'PetroMiles';
+    if (n.indexOf('cms') !== -1)                                 return 'CMS';
+    return String(src[i]);
+  }
+  return '(Blank)';
+}
+/* Portal "Transaction Category" = API transactionType: SALE / CREDIT_SETTLEMENT / RECHARGE / REDEEM / REVERSED */
+function category(r) { return String(r.transactionType || '').toUpperCase().trim().replace(/\s+/g, '_') || '(BLANK)'; }
+
+function classify(r, reversedIds) {
+  var c = category(r);
+  if (c.indexOf('RECHARGE') !== -1)                                 return 'RECHARGE';
+  if (c.indexOf('REDEEM') !== -1 || c.indexOf('REDEMPTION') !== -1) return 'PETROMILES';
+  if (c.indexOf('REVERS') !== -1)                                   return 'REVERSAL';
+  if (r.transactionId && reversedIds[r.transactionId])               return 'REVERSED_ORIG';
+  if (c.indexOf('SETTLEMENT') !== -1)                               return 'CONSUMPTION';
+  if (c.indexOf('SALE') !== -1) return walletType(r) === 'Dealer Credit' ? 'DEALER_CREDIT' : 'CONSUMPTION';
+  return 'OTHER';
+}
+
+/* Amount used for each record. Recharge / PetroMiles may carry the value in purchaseAmount. */
+function amtOf(r) {
+  var a = num(r.transactionAmount);
+  var g = groupOf(r);
+  if (!a && (g === 'RECHARGE' || g === 'PETROMILES')) a = num(r.purchaseAmount);
+  return a;
+}
+
+/* Date + time in ms (for opening / closing balance) */
+function recTime(r) {
+  var d = recDate(r);
+  if (!d) return 0;
+  var t = String(r.txnFormattedTime || '').match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+  if (t) {
+    var h = +t[1] % 12;
+    if (t[4] && t[4].toUpperCase() === 'PM') h += 12;
+    if (!t[4]) h = +t[1];
+    d.setHours(h, +t[2], +(t[3] || 0));
+  }
+  return d.getTime();
+}
+
+/* ---- FILTERS ---- */
+var FILTERS = [
+  { id:'stationFilter', key:'roName',            all:'All Stations' },
+  { id:'paymentFilter', key:'paymentMode',       all:'All' },
+  { id:'txnTypeFilter', key:'transactionType',   all:'All' },
+  { id:'productFilter', key:'productName',       all:'All' },
+  { id:'settleFilter',  key:'settlementStatus',  all:'All' }
+];
+
+function fillSelect(f) {
+  var sel = $(f.id), keep = sel.value, seen = {}, vals = [];
+  allRecords.forEach(function(r) {
+    var v = r[f.key];
+    if (v != null && v !== '' && !seen[v]) { seen[v] = true; vals.push(String(v)); }
+  });
+  vals.sort(byName);
+  sel.innerHTML = '<option value="">' + f.all + '</option>' +
+    vals.map(function(v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+  sel.value = vals.indexOf(keep) !== -1 ? keep : '';
+}
+
+var openBal = '', closeBal = '';
+
+function buildUI() {
+  /* 1. which transactions were reversed */
+  var reversedIds = {};
+  allRecords.forEach(function(r) {
+    if (category(r).indexOf('REVERS') !== -1 && r.originalTxnId) reversedIds[r.originalTxnId] = true;
+  });
+  /* 2. put every record in a calculation group */
+  recGroup = new WeakMap();
+  allRecords.forEach(function(r) { recGroup.set(r, classify(r, reversedIds)); });
+
+  /* 3. filters */
+  FILTERS.forEach(fillSelect);
+  var cg = $('calcFilter'), keep = cg.value, present = {};
+  allRecords.forEach(function(r) { present[groupOf(r)] = true; });
+  cg.innerHTML = '<option value="">All</option>' + Object.keys(GROUP_LABEL).filter(function(g) { return present[g]; })
+    .map(function(g) { return '<option value="' + g + '">' + esc(GROUP_LABEL[g]) + '</option>'; }).join('');
+  cg.value = present[keep] ? keep : '';
+
+  /* 5. opening / closing CMS balance from the API (can be edited in table 1) */
+  var sorted = allRecords.filter(function(r) { return r.cmsClosingBal !== '' && r.cmsClosingBal != null && num(r.cmsClosingBal) !== 0; })
+                         .sort(function(a, b) { return recTime(a) - recTime(b); });
+  openBal = ''; closeBal = '';
+  if (sorted.length) {
+    /* opening balance: first CMS-wallet movement. Recharge / PetroMiles / reversal ADD money,
+       sales and credit settlement TAKE money, so undo the first movement accordingly. */
+    var cmsOnly = sorted.filter(function(r) { var w = walletType(r); return w === 'CMS' || w === 'HDFCVirtual' || w === 'PetroMiles'; });
+    var first = (cmsOnly.length ? cmsOnly : sorted)[0], last = sorted[sorted.length - 1];
+    var g1 = groupOf(first), adds = (g1 === 'RECHARGE' || g1 === 'PETROMILES' || g1 === 'REVERSAL');
+    openBal  = (first.cmsOpeningBal !== '' && first.cmsOpeningBal != null)
+               ? num(first.cmsOpeningBal)
+               : +(num(first.cmsClosingBal) + (adds ? -1 : 1) * amtOf(first)).toFixed(2);
+    closeBal = num(last.cmsClosingBal);
+  }
+  applyFilter();
+}
+
+function applyFilter() {
+  var active = FILTERS.map(function(f) { return { key:f.key, val:$(f.id).value }; })
+                      .filter(function(f) { return f.val !== ''; });
+  var calc = $('calcFilter').value;
+  filteredRec = allRecords.filter(function(r) {
+    if (calc && groupOf(r) !== calc) return false;
+    return active.every(function(f) { return String(r[f.key] == null ? '' : r[f.key]) === f.val; });
+  });
+
+  var by = {};
+  Object.keys(GROUP_LABEL).forEach(function(g) { by[g] = []; });
+  filteredRec.forEach(function(r) { by[groupOf(r)].push(r); });
+
+  renderPrintTable(by);
+
+  renderPivotTable({
+    recs: by.CONSUMPTION, wrapId:'txnTypeWrap', badgeId:'txnTypeBadge',
+    title:'Transaction Type Report (Money Spent on Fuel)', rowHeader:'Type · Category',
+    rowKey: function(r) { return walletType(r) + ' · ' + category(r); },
+    unit:'types', withQty:true
+  });
+
+  /* All products actually sold (Petrol / Speed are bought only on Dealer Credit,
+     so they never appear in the consumption table above). */
+  renderPivotTable({
+    recs: by.CONSUMPTION.concat(by.DEALER_CREDIT).filter(function(r) { return category(r).indexOf('SALE') !== -1; }),
+    wrapId:'productAllWrap', badgeId:'productAllBadge',
+    title:'Product Type Report — All Fuel Sales (CMS + Rewards + Dealer Credit)', rowHeader:'Product',
+    rowKey: function(r) { return r.productName || '(Blank)'; },
+    unit:'products', withQty:true
+  });
+
+  renderExcluded(by);
+
+  renderPivotTable({
+    recs: by.DEALER_CREDIT, wrapId:'dcWrap', badgeId:'dcBadge', dc:true,
+    title:'Dealer Credit Report — Date-wise', rowHeader:'Date',
+    rowKey: function(r) { var d = recDate(r); return d ? dateKey(d) : null; },
+    rowLabel: function(r) { return dateLabel(recDate(r)); },
+    unit:'days', emptyMsg:'No Dealer Credit transactions for the selected filters.'
+  });
+
+  renderPivotTable({
+    recs: by.DEALER_CREDIT, wrapId:'dcSettleWrap', badgeId:'dcSettleBadge', dc:true,
+    title:'Dealer Credit — Settlement Status Report (Settled vs Pending)', rowHeader:'Settlement Status',
+    rowKey: function(r) { return isDcSettled(r) ? 'Settled (Completed)' : 'Pending (Not Settled)'; },
+    unit:'statuses', withQty:true, emptyMsg:'No Dealer Credit transactions for the selected filters.'
+  });
+  if (by.DEALER_CREDIT.length) {
+    var dcSet = by.DEALER_CREDIT.filter(isDcSettled), dcPen = by.DEALER_CREDIT.filter(function(r) { return !isDcSettled(r); });
+    $('dcSettleBadge').textContent =
+      'Settled: Rs.' + fmtMoney(sumAmt(dcSet)) + ' (' + fmtNum(dcSet.length) + ' txns) | ' +
+      'Pending: Rs.' + fmtMoney(sumAmt(dcPen)) + ' (' + fmtNum(dcPen.length) + ' txns)';
+  }
+
+}
+
+document.querySelectorAll('.data-filter').forEach(function(sel) {
+  sel.addEventListener('change', function() { if (allRecords.length) applyFilter(); });
+});
+
+function clearFilters() {
+  setDefaultDates();
+  FILTERS.forEach(function(f) { $(f.id).value = ''; });
+  $('calcFilter').value = '';
+  if (allRecords.length) applyFilter();
+}
+
+function sumAmt(list) { return list.reduce(function(a, r) { return a + amtOf(r); }, 0); }
+function sumQty(list) { return list.reduce(function(a, r) { return a + num(r.productQty); }, 0); }
+
+/* ---- KPI CARDS ---- */
+/* ---- TABLE 1: PRINT (master) ---- */
+function periodTitle() {
+  var mon = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEPT','OCT','NOV','DEC'];
+  var s = $('startDate').value, e = $('endDate').value;
+  if (!s || !e) return '';
+  var a = s.split('-'), b = e.split('-');
+  if (a[0] === b[0] && a[1] === b[1]) return mon[+a[1] - 1] + '-' + a[0];
+  return mon[+a[1] - 1] + '-' + a[0] + ' TO ' + mon[+b[1] - 1] + '-' + b[0];
+}
+
+function renderPrintTable(by) {
+  var cons = by.CONSUMPTION, rech = by.RECHARGE, pm = by.PETROMILES;
+  if (!cons.length && !rech.length && !pm.length) {
+    $('printWrap').innerHTML = '<div class="empty-state"><div class="e-icon">&#128205;</div><strong>No records</strong>No transactions found for the selected filters.</div>';
+    $('printBadge').textContent = '0 records';
+    return;
+  }
+
+  var stMap = {}, days = {};
+  function day(r) {
+    var d = recDate(r); if (!d) return null;
+    var k = dateKey(d);
+    if (!days[k]) days[k] = { label: dateLabel(d), rech: 0, pm: 0, st: {}, tot: 0 };
+    return days[k];
+  }
+  rech.forEach(function(r) { var d = day(r); if (d) d.rech += amtOf(r); });
+  pm.forEach(function(r)   { var d = day(r); if (d) d.pm   += amtOf(r); });
+  cons.forEach(function(r) {
+    var d = day(r); if (!d) return;
+    var s = r.roName || 'Unknown';
+    stMap[s] = true;
+    d.st[s] = (d.st[s] || 0) + amtOf(r);
+    d.tot  += amtOf(r);
+  });
+  var stations = Object.keys(stMap).sort(byName);
+  var keys = Object.keys(days).sort();
+  var cols = 3 + stations.length + 1;
+
+  var tRech = 0, tPm = 0, tCons = 0, stTot = {};
+  keys.forEach(function(k) {
+    var d = days[k]; tRech += d.rech; tPm += d.pm; tCons += d.tot;
+    stations.forEach(function(s) { stTot[s] = (stTot[s] || 0) + (d.st[s] || 0); });
+  });
+  function c(v) { return '<td>' + (v ? fmtMoney(v) : '') + '</td>'; }
+
+  var out = '<table class="print-table"><thead>';
+  out += '<tr class="title-row"><th colspan="' + cols + '">BPCL - PORTAL ' + esc(periodTitle()) + '</th></tr>';
+  out += '<tr class="group-row"><th>Date</th><th>HDFCVirtual</th><th>PetroMiles</th>' +
+         (stations.length ? '<th colspan="' + stations.length + '">CMS</th>' : '') + '<th>Grand Total</th></tr>';
+  out += '<tr class="label-row"><th>Row Labels</th><th>Recharge (Rs.)</th><th>Redeem (Rs.)</th>' +
+         stations.map(function(s) { return '<th>' + esc(s) + '</th>'; }).join('') + '<th>Grand Total</th></tr>';
+  out += '</thead><tbody>';
+  keys.forEach(function(k) {
+    var d = days[k];
+    out += '<tr><td>' + esc(d.label) + '</td>' + c(d.rech) + c(d.pm) +
+           stations.map(function(s) { return c(d.st[s]); }).join('') +
+           '<td>' + fmtMoney(d.tot) + '</td></tr>';
+  });
+  out += '<tr class="total-row"><td>Grand Total</td><td>' + fmtMoney(tRech) + '</td><td>' + fmtMoney(tPm) + '</td>' +
+         stations.map(function(s) { return '<td>' + fmtMoney(stTot[s]) + '</td>'; }).join('') +
+         '<td>' + fmtMoney(tCons) + '</td></tr>';
+
+  /* Balance check — same as rows 36-40 of the PRINT sheet */
+  var pad = new Array(Math.max(cols - 5, 0) + 1).join('<td></td>');
+  function inp(id, v) {
+    return '<input type="number" step="0.01" id="' + id + '" value="' + esc(v) + '" oninput="updateBalance()" ' +
+           'style="width:130px;text-align:right;font:inherit;font-weight:700;border:1px solid #d1d5db;border-radius:4px;padding:3px 6px;background:#fff">';
+  }
+  out += '<tr class="spacer"><td colspan="' + cols + '"></td></tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">OPENING BALANCE</td><td class="val hi">' + inp('openBalInp', openBal) + '</td><td class="val" id="balIn"></td><td class="lbl">VARIATION</td>' + pad + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">TOTAL RECHARGE</td><td class="val hi">' + fmtMoney(tRech) + '</td><td></td><td class="val hi" id="balVar"></td>' + pad + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">PETRO MILES</td><td class="val hi">' + fmtMoney(tPm) + '</td><td></td><td></td>' + pad + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">TOTAL FUEL EXPENSE</td><td class="val hi">' + fmtMoney(tCons) + '</td><td class="val" id="balOut"></td><td></td>' + pad + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">CLOSING BALANCE</td><td class="val hi">' + inp('closeBalInp', closeBal) + '</td><td></td><td></td>' + pad + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">TOTAL QUANTITY (Litres)</td><td class="val">' + fmtQty(sumQty(cons)) + '</td><td></td><td></td>' + pad + '</tr>';
+  out += '</tbody></table>';
+
+  $('printWrap').innerHTML = out;
+  $('printWrap').dataset.rech = tRech; $('printWrap').dataset.pm = tPm; $('printWrap').dataset.cons = tCons;
+  $('printBadge').textContent = keys.length + ' days | ' + stations.length + ' stations | ' + fmtNum(cons.length) + ' txns counted';
+  updateBalance();
+}
+
+function updateBalance() {
+  var w = $('printWrap'), oi = $('openBalInp'), ci = $('closeBalInp');
+  if (!oi || !ci) return;
+  openBal = oi.value; closeBal = ci.value;
+  var inSide  = num(oi.value) + num(w.dataset.rech) + num(w.dataset.pm);
+  var outSide = num(w.dataset.cons) + num(ci.value);
+  $('balIn').textContent  = fmtMoney(inSide);
+  $('balOut').textContent = fmtMoney(outSide);
+  $('balVar').textContent = (oi.value === '' || ci.value === '') ? 'Enter balances' : fmtMoney(inSide - outSide);
+  updateBalanceBoxes();
+}
+function updateBalanceBoxes() {
+  $('balanceBoxes').style.display = allRecords.length ? '' : 'none';
+  $('boxOpenBal').textContent  = (openBal === '' || openBal == null) ? 'Not available' : 'Rs.' + fmtMoney(num(openBal));
+  $('boxCloseBal').textContent = (closeBal === '' || closeBal == null) ? 'Not available' : 'Rs.' + fmtMoney(num(closeBal));
+  var sd = $('startDate').value, ed = $('endDate').value;
+  function d(v) { if (!v) return ''; var p = v.split('-'); return p[2] + '-' + p[1] + '-' + p[0]; }
+  $('boxOpenSub').textContent  = 'CMS balance on ' + (d(sd) || 'start date') + ' (start)';
+  $('boxCloseSub').textContent = 'CMS balance on ' + (d(ed) || 'end date') + ' (end)';
+}
+
+/* ---- TABLE 4: NOT COUNTED ---- */
+function renderExcluded(by) {
+  var groups = ['RECHARGE','PETROMILES','DEALER_CREDIT','REVERSAL','REVERSED_ORIG','OTHER'];
+  var rows = {}, total = 0;
+  groups.forEach(function(g) {
+    by[g].forEach(function(r) {
+      var k = g + '|' + walletType(r) + ' · ' + category(r);
+      if (!rows[k]) rows[k] = { g: g, t: walletType(r) + ' · ' + category(r), n: 0, q: 0, a: 0 };
+      rows[k].n++; rows[k].q += num(r.productQty); rows[k].a += (g === 'REVERSED_ORIG' || g === 'REVERSAL') ? num(r.purchaseAmount) || amtOf(r) : amtOf(r);
+      total++;
+    });
+  });
+  var list = Object.keys(rows).map(function(k) { return rows[k]; });
+  if (!list.length) {
+    $('exclWrap').innerHTML = '<div class="empty-state"><div class="e-icon">&#9989;</div><strong>Nothing excluded</strong>All records in the current filter are counted.</div>';
+    $('exclBadge').textContent = '0 records';
+    return;
+  }
+  var out = '<table class="print-table"><thead>' +
+            '<tr class="title-row"><th colspan="6">Need to Pay Bunk Credit</th></tr>' +
+            '<tr class="group-row"><th>Group</th><th>Type · Category</th><th>Txns</th><th>Qty (Litres)</th><th>Amount (Rs.)</th><th>Reason</th></tr>' +
+            '</thead><tbody>';
+  list.forEach(function(x) {
+    out += '<tr><td>' + esc(GROUP_LABEL[x.g]) + '</td><td style="text-align:left">' + esc(x.t) + '</td><td>' + fmtNum(x.n) +
+           '</td><td>' + fmtQty(x.q) + '</td><td>' + fmtMoney(x.a) + '</td><td style="text-align:left;white-space:normal;min-width:260px">' +
+           esc(GROUP_REASON[x.g]) + '</td></tr>';
+  });
+  out += '</tbody></table>';
+  $('exclWrap').innerHTML = out;
+  $('exclBadge').textContent = fmtNum(total) + ' records';
+}
+/* ---- GENERIC PIVOT TABLE (same format for every table) ----
+   rows = o.rowKey(record), columns = fuel stations (roName)        */
+function renderPivotTable(o) {
+  var wrap = $(o.wrapId), badge = $(o.badgeId);
+  if (!o.recs.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="e-icon">&#128205;</div><strong>No records</strong>' +
+                     esc(o.emptyMsg || 'No transactions found for the selected filters.') + '</div>';
+    badge.textContent = '0 records';
+    return;
+  }
+
+  var stMap = {}, rows = {}, stTot = {}, gAmt = 0, gQty = 0;
+  o.recs.forEach(function(r) {
+    var rk = o.rowKey(r);
+    if (rk == null) return;
+    var stn = r.roName || 'Unknown';
+    var amt = num(r.transactionAmount), qty = num(r.productQty);
+    stMap[stn] = true;
+    if (!rows[rk]) rows[rk] = { key: rk, label: o.rowLabel ? o.rowLabel(r) : rk, st: {}, amt: 0, qty: 0 };
+    var row = rows[rk];
+    if (!row.st[stn]) row.st[stn] = { amt: 0, qty: 0 };
+    row.st[stn].amt += amt; row.st[stn].qty += qty;
+    row.amt += amt; row.qty += qty;
+    if (!stTot[stn]) stTot[stn] = { amt: 0, qty: 0 };
+    stTot[stn].amt += amt; stTot[stn].qty += qty;
+    gAmt += amt; gQty += qty;
+  });
+
+  var stations = Object.keys(stMap).sort(byName);
+  var rowList  = Object.keys(rows).sort(byName).map(function(k) { return rows[k]; });
+  var per  = o.withQty ? 2 : 1;
+  var cols = 1 + stations.length * per + per;
+
+  function cells(cell) {
+    if (!cell) return o.withQty ? '<td></td><td></td>' : '<td></td>';
+    return o.withQty ? '<td>' + fmtQty(cell.qty) + '</td><td>' + fmtMoney(cell.amt) + '</td>'
+                     : '<td>' + fmtMoney(cell.amt) + '</td>';
+  }
+
+  var out = '<table class="print-table"><colgroup><col style="min-width:140px">' +
+            new Array(stations.length * per + per + 1).join(o.withQty ? '<col style="min-width:110px">' : '<col style="min-width:145px">') +
+            '</colgroup><thead>';
+  out += '<tr class="title-row"><th colspan="' + cols + '">' + esc(o.title) + '</th></tr>';
+  out += '<tr class="group-row' + (o.dc ? ' dc' : '') + '"><th>' + esc(o.rowHeader) + '</th>' +
+         '<th colspan="' + (stations.length * per) + '">Fuel Stations (' + (o.withQty ? 'Qty Litres / Amount Rs.' : 'Amount Rs.') + ')</th>' +
+         '<th colspan="' + per + '">Grand Total' + (o.withQty ? '' : ' (Rs.)') + '</th></tr>';
+  if (o.withQty) {
+    out += '<tr class="label-row"><th rowspan="2">Row Labels</th>' +
+           stations.map(function(s) { return '<th colspan="2">' + esc(s) + '</th>'; }).join('') +
+           '<th colspan="2">Grand Total</th></tr>';
+    out += '<tr class="sub-row">' + new Array(stations.length + 2).join('<th>Qty (Litres)</th><th>Amount (Rs.)</th>') + '</tr>';
+  } else {
+    out += '<tr class="label-row"><th>Row Labels</th>' +
+           stations.map(function(s) { return '<th>' + esc(s) + '</th>'; }).join('') + '<th>Grand Total</th></tr>';
+  }
+  out += '</thead><tbody>';
+
+  rowList.forEach(function(row) {
+    out += '<tr><td>' + esc(row.label) + '</td>' +
+           stations.map(function(s) { return cells(row.st[s]); }).join('') +
+           cells({ amt: row.amt, qty: row.qty }) + '</tr>';
+  });
+
+  out += '<tr class="total-row"><td>Grand Total</td>' +
+         stations.map(function(s) { return cells(stTot[s]); }).join('') +
+         cells({ amt: gAmt, qty: gQty }) + '</tr>';
+
+  var extraTds = new Array(Math.max(cols - 3, 0) + 1).join('<td></td>');
+  out += '<tr class="spacer"><td colspan="' + cols + '"></td></tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">TOTAL AMOUNT (Rs.)</td><td class="val hi">' + fmtMoney(gAmt) + '</td>' + extraTds + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">TOTAL QUANTITY (Litres)</td><td class="val hi">' + fmtQty(gQty) + '</td>' + extraTds + '</tr>';
+  out += '<tr class="summary"><td></td><td class="lbl">NO. OF TRANSACTIONS</td><td class="val hi">' + fmtNum(o.recs.length) + '</td>' + extraTds + '</tr>';
+  out += '</tbody></table>';
+
+  wrap.innerHTML = out;
+  badge.textContent = rowList.length + ' ' + o.unit + ' | ' + stations.length + ' stations | ' + fmtNum(o.recs.length) + ' txns';
+}
+
+</script>
+</body>
+</html>
